@@ -36,7 +36,23 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [[ ! -f "${SCRIPT_DIR}/comment-helpers.sh" ]]; then
+  echo "ERROR: comment-helpers.sh not found (requires PR #11 explore agent)"
+  exit 1
+fi
 source "${SCRIPT_DIR}/comment-helpers.sh"
+
+# Strip GHA workflow-command metacharacters from interpolated log output.
+sanitize_gha() {
+  local val="$1"
+  val="${val//::/}"
+  val="${val//%0A/}"
+  val="${val//%0a/}"
+  val="${val//%0D/}"
+  val="${val//%0d/}"
+  printf '%s' "${val}"
+}
 
 RESULT_FILE=""
 for dir in iteration-*/output; do
@@ -279,9 +295,13 @@ if [[ -n "${GITHUB_ISSUE_NUMBER:-}" && "${GITHUB_ISSUE_NUMBER}" != "N/A" ]]; the
   if [[ "$REVIEW_ROUND" -gt 1 ]]; then
     LABEL_PAYLOAD="[\"ready-to-critique\",\"refine-revision-round-${REVIEW_ROUND}\"]"
   fi
-  gh api "repos/${REPO_FULL_NAME}/issues/${GITHUB_ISSUE_NUMBER}/labels" \
-    --input - <<< "{\"labels\":${LABEL_PAYLOAD}}" --silent 2>/dev/null || true
-  echo "::notice::Added label 'ready-to-critique' to GitHub issue #${GITHUB_ISSUE_NUMBER}"
+  if gh api "repos/${REPO_FULL_NAME}/issues/${GITHUB_ISSUE_NUMBER}/labels" \
+    --input - <<< "{\"labels\":${LABEL_PAYLOAD}}" --silent 2>/dev/null; then
+    SAFE_GH_NUM=$(sanitize_gha "${GITHUB_ISSUE_NUMBER}")
+    echo "::notice::Added label 'ready-to-critique' to GitHub issue #${SAFE_GH_NUM}"
+  else
+    echo "::warning::Failed to add critique labels to GitHub issue #${GITHUB_ISSUE_NUMBER}"
+  fi
 fi
 
 if [[ "${ISSUE_SOURCE:-}" == "jira" && -n "${JIRA_HOST:-}" && -n "${JIRA_EMAIL:-}" && -n "${JIRA_API_TOKEN:-}" ]]; then
@@ -290,12 +310,17 @@ if [[ "${ISSUE_SOURCE:-}" == "jira" && -n "${JIRA_HOST:-}" && -n "${JIRA_EMAIL:-
   if [[ "$REVIEW_ROUND" -gt 1 ]]; then
     LABEL_OPS="[{\"add\":\"ready-to-critique\"},{\"add\":\"refine-revision-round-${REVIEW_ROUND}\"}]"
   fi
-  curl -sSf -X PUT \
+  if curl -sSf -X PUT \
     -H "Authorization: Basic $AUTH_LABEL" \
     -H "Content-Type: application/json" \
     -d "{\"update\":{\"labels\":${LABEL_OPS}}}" \
-    "https://${JIRA_HOST}/rest/api/3/issue/${ISSUE_KEY}" > /dev/null 2>&1 || true
-  echo "::notice::Added label 'ready-to-critique' to Jira ${ISSUE_KEY} (round ${REVIEW_ROUND})"
+    "https://${JIRA_HOST}/rest/api/3/issue/${ISSUE_KEY}" > /dev/null 2>&1; then
+    SAFE_JIRA_KEY=$(sanitize_gha "${ISSUE_KEY}")
+    SAFE_ROUND=$(sanitize_gha "${REVIEW_ROUND}")
+    echo "::notice::Added label 'ready-to-critique' to Jira ${SAFE_JIRA_KEY} (round ${SAFE_ROUND})"
+  else
+    echo "::warning::Failed to add critique labels to Jira ${ISSUE_KEY} (round ${REVIEW_ROUND})"
+  fi
 fi
 
 echo "Post-refine complete."

@@ -11,7 +11,7 @@ disallowedTools: >-
   Bash(git push *), Bash(git push),
   Bash(gh issue create *), Bash(gh issue edit *), Bash(gh issue comment *),
   Bash(gh pr create *), Bash(gh pr edit *), Bash(gh pr merge *),
-  Bash(gh api *POST*), Bash(gh api *DELETE*), Bash(gh api *PATCH*), Bash(gh api *PUT*)
+  Bash(gh api *)
 ---
 
 # Refinement Agent

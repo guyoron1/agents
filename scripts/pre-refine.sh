@@ -32,7 +32,21 @@ WORKSPACE="/tmp/workspace"
 mkdir -p "$WORKSPACE"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-echo "::notice::Pre-refine: preparing context (source=${ISSUE_SOURCE}, key=${ISSUE_KEY})"
+
+# Strip GHA workflow-command metacharacters from interpolated log output.
+sanitize_gha() {
+  local val="$1"
+  val="${val//::/}"
+  val="${val//%0A/}"
+  val="${val//%0a/}"
+  val="${val//%0D/}"
+  val="${val//%0d/}"
+  printf '%s' "${val}"
+}
+
+SAFE_ISSUE_SOURCE=$(sanitize_gha "${ISSUE_SOURCE}")
+SAFE_ISSUE_KEY=$(sanitize_gha "${ISSUE_KEY}")
+echo "::notice::Pre-refine: preparing context (source=${SAFE_ISSUE_SOURCE}, key=${SAFE_ISSUE_KEY})"
 
 # --- Step 1: Ensure issue context ---
 if [[ ! -f "$WORKSPACE/issue-context.json" ]]; then
@@ -40,7 +54,7 @@ if [[ ! -f "$WORKSPACE/issue-context.json" ]]; then
     echo "Fetching issue context via pre-explore.sh..."
     SKIP_REPO_CLONING=1 bash "${SCRIPT_DIR}/pre-explore.sh"
   else
-    echo "ERROR: No issue context available and pre-explore.sh not found"
+    echo "ERROR: No issue context available and pre-explore.sh not found (requires PR #11 explore agent)"
     exit 1
   fi
 fi
@@ -275,7 +289,8 @@ echo "REVIEW_ROUND=$REVIEW_ROUND" >> "${GITHUB_ENV:-/dev/null}"
 if [[ -n "${HUMAN_DIRECTIVE:-}" ]]; then
   echo "$HUMAN_DIRECTIVE" > "$WORKSPACE/human-directive.txt"
   echo "HUMAN_DIRECTIVE_FILE=$WORKSPACE/human-directive.txt" >> "${GITHUB_ENV:-/dev/null}"
-  echo "::notice::Human directive received: ${HUMAN_DIRECTIVE:0:100}..."
+  SAFE_DIRECTIVE=$(sanitize_gha "${HUMAN_DIRECTIVE:0:100}")
+  echo "::notice::Human directive received: ${SAFE_DIRECTIVE}..."
 fi
 
 if [[ -f "$WORKSPACE/critique-feedback.json" ]]; then

@@ -62,9 +62,7 @@ env:
     AUTO_CREATE: "${AUTO_CREATE}"
     GITHUB_ISSUE_NUMBER: "${GITHUB_ISSUE_NUMBER}"
     HUMAN_DIRECTIVE: "${HUMAN_DIRECTIVE}"
-    FULLSEND_OUTPUT_FILE: refine-result.json
   sandbox:
-    GH_TOKEN: "${GH_TOKEN}"
     REVIEW_ROUND: "${REVIEW_ROUND}"
     HUMAN_DIRECTIVE_FILE: "/sandbox/workspace/human-directive.txt"
 

@@ -1,14 +1,12 @@
 # Refine Agent
 
-<img src="icons/refine.png" alt="Refine agent icon" width="80">
-
 Decomposes a work item — feature, epic, story, or issue — into implementable child work items with testable acceptance criteria, dependency analysis, and confidence scoring. Always produces a plan, even when information is incomplete.
 
 ## How the agent works
 
 The refine agent runs after the explore agent has gathered technical context. It reads the issue description, exploration context (codebase analysis, related work, competitive landscape), and any prior critique feedback. It then decomposes the work item into a hierarchy of child issues sized for engineering teams and sprints.
 
-The agent runs in a read-only sandbox. It cannot modify issues, push code, or create child issues. Its only output is a structured JSON refinement plan consumed by the post-script, which posts a summary comment, attaches the plan to the issue, and adds a `ready-to-critique` label to signal the [critique agent](critique.md).
+The agent runs in a read-only sandbox. It cannot modify issues, push code, or create child issues. Its only output is a structured JSON refinement plan consumed by the post-script, which posts a summary comment, attaches the plan to the issue, updates the issue description when the agent proposes a revised one, and adds a `ready-to-critique` label to signal the [critique agent](critique.md).
 
 ## How it helps
 
