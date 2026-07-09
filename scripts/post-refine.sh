@@ -115,6 +115,7 @@ CONFIDENCE_INT=$(printf '%.0f' "$CONFIDENCE" 2>/dev/null || echo "0")
 echo "::notice::Refine complete (confidence ${CONFIDENCE_INT}/100) — posting proposed plan and signaling critique"
 
 if $USE_GITHUB; then
+  remove_label "${REPO_FULL_NAME}" "$GITHUB_ISSUE_NUMBER" "ready-to-refine"
   remove_label "${REPO_FULL_NAME}" "$GITHUB_ISSUE_NUMBER" "refine-needs-input"
   remove_label "${REPO_FULL_NAME}" "$GITHUB_ISSUE_NUMBER" "human-refinement"
 fi
@@ -306,6 +307,12 @@ fi
 
 if [[ "${ISSUE_SOURCE:-}" == "jira" && -n "${JIRA_HOST:-}" && -n "${JIRA_EMAIL:-}" && -n "${JIRA_API_TOKEN:-}" ]]; then
   AUTH_LABEL=$(printf '%s:%s' "$JIRA_EMAIL" "$JIRA_API_TOKEN" | base64 -w0)
+  # Remove the trigger label before adding the critique-signaling label
+  curl -sSf -X PUT \
+    -H "Authorization: Basic $AUTH_LABEL" \
+    -H "Content-Type: application/json" \
+    -d '{"update":{"labels":[{"remove":"ready-to-refine"}]}}' \
+    "https://${JIRA_HOST}/rest/api/3/issue/${ISSUE_KEY}" > /dev/null 2>&1 || true
   LABEL_OPS='[{"add":"ready-to-critique"}]'
   if [[ "$REVIEW_ROUND" -gt 1 ]]; then
     LABEL_OPS="[{\"add\":\"ready-to-critique\"},{\"add\":\"refine-revision-round-${REVIEW_ROUND}\"}]"

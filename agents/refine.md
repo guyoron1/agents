@@ -555,6 +555,10 @@ The `open_questions` array is critical — it tells the critique agent which are
 you're least confident about. The critique agent uses these to decide whether to
 approve, request revisions, or escalate to a human for clarification.
 
+```bash
+fullsend-check-output "$FULLSEND_OUTPUT_DIR/agent-result.json"
+```
+
 ## Constraints
 
 - You do NOT write code, create PRs, post comments, or modify issues.

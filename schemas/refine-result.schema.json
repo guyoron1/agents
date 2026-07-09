@@ -1,12 +1,15 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "refine-result.schema.json",
   "title": "Refinement Result",
   "description": "Output schema for the refine agent — always a complete decomposition plan.",
   "type": "object",
+  "additionalProperties": false,
   "required": ["input", "status", "confidence", "target_level", "children", "comment", "summary"],
   "properties": {
     "input": {
       "type": "object",
+      "additionalProperties": false,
       "required": ["source", "key", "level", "summary"],
       "properties": {
         "source": { "type": "string", "enum": ["jira", "github", "gitlab", "text"] },
@@ -24,6 +27,7 @@
     },
     "confidence": {
       "type": "object",
+      "additionalProperties": false,
       "required": ["overall"],
       "properties": {
         "scope_clarity": { "type": "number", "minimum": 0, "maximum": 100 },
@@ -39,6 +43,7 @@
       "minItems": 1,
       "items": {
         "type": "object",
+        "additionalProperties": false,
         "required": ["title", "type", "description", "acceptance_criteria"],
         "properties": {
           "title": { "type": "string" },
@@ -54,6 +59,8 @@
             "type": "array",
             "items": {
               "type": "object",
+              "additionalProperties": false,
+              "required": ["type", "target"],
               "properties": {
                 "type": { "type": "string" },
                 "target": { "type": "string" },
@@ -75,6 +82,7 @@
       "type": "array",
       "items": {
         "type": "object",
+        "additionalProperties": false,
         "required": ["dimension", "question", "impact"],
         "properties": {
           "dimension": { "type": "string" },

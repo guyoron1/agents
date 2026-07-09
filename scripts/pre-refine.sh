@@ -282,9 +282,11 @@ else
   echo "::warning::No platform context template found for source=${ISSUE_SOURCE}"
 fi
 
-echo "ISSUE_CONTEXT=$WORKSPACE/issue-context.json" >> "${GITHUB_ENV:-/dev/null}"
-echo "EXPLORE_CONTEXT=$WORKSPACE/exploration_context.json" >> "${GITHUB_ENV:-/dev/null}"
-echo "REVIEW_ROUND=$REVIEW_ROUND" >> "${GITHUB_ENV:-/dev/null}"
+{
+  echo "ISSUE_CONTEXT=$WORKSPACE/issue-context.json"
+  echo "EXPLORE_CONTEXT=$WORKSPACE/exploration_context.json"
+  echo "REVIEW_ROUND=$REVIEW_ROUND"
+} >> "${GITHUB_ENV:-/dev/null}"
 
 if [[ -n "${HUMAN_DIRECTIVE:-}" ]]; then
   echo "$HUMAN_DIRECTIVE" > "$WORKSPACE/human-directive.txt"
