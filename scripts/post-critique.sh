@@ -34,6 +34,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [[ ! -f "${SCRIPT_DIR}/comment-helpers.sh" ]]; then
+  echo "ERROR: comment-helpers.sh not found (requires PR #11 explore agent)"
+  exit 1
+fi
 source "${SCRIPT_DIR}/comment-helpers.sh"
 
 REVIEW_ROUND="${REVIEW_ROUND:-1}"
@@ -238,11 +243,11 @@ ${COMMENT}
 
     if $USE_GITHUB; then
       add_label "${REPO_FULL_NAME}" "$GITHUB_ISSUE_NUMBER" "refine-needs-human"
-      add_label "${REPO_FULL_NAME}" "$GITHUB_ISSUE_NUMBER" "refine-approved"
+      add_label "${REPO_FULL_NAME}" "$GITHUB_ISSUE_NUMBER" "refine-escalated"
     fi
 
     if [[ -f "$CRITIQUE_HISTORY_FILE" ]]; then
-      UPDATED=$(jq '.rounds[-1].verdict = "approved" | .rounds[-1].escalated = true' "$CRITIQUE_HISTORY_FILE")
+      UPDATED=$(jq '.rounds[-1].escalated = true | .rounds[-1].escalation_reason = "max_rounds"' "$CRITIQUE_HISTORY_FILE")
       echo "$UPDATED" > "$CRITIQUE_HISTORY_FILE"
     fi
 

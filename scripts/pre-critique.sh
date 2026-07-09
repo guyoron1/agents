@@ -38,7 +38,7 @@ if [[ ! -f "$WORKSPACE/issue-context.json" ]]; then
     echo "Fetching issue context via pre-explore.sh..."
     SKIP_REPO_CLONING=1 bash "${SCRIPT_DIR}/pre-explore.sh"
   else
-    echo "ERROR: No issue context available and pre-explore.sh not found"
+    echo "ERROR: No issue context available and pre-explore.sh not found (requires PR #11 explore agent)"
     exit 1
   fi
 fi

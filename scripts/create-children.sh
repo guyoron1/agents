@@ -49,7 +49,34 @@ elif [[ "${ISSUE_SOURCE:-}" == "github" ]]; then
   GITHUB_ISSUE_NUMBER="${ISSUE_KEY}"
 fi
 
+ADF_SCRIPT="${SCRIPT_DIR}/markdown-to-adf.py"
+if [[ ! -f "$ADF_SCRIPT" ]]; then
+  echo "ERROR: markdown-to-adf.py not found (requires PR #11 explore agent)"
+  exit 1
+fi
+
 # --- Helper functions ---
+
+resolve_github_parent_number() {
+  local parent_key="$1"
+
+  if [[ "$parent_key" =~ ^[0-9]+$ ]]; then
+    echo "$parent_key"
+    return
+  fi
+
+  if [[ "$parent_key" =~ ^#[0-9]+$ ]]; then
+    echo "${parent_key#\#}"
+    return
+  fi
+
+  if [[ "$parent_key" == "$ISSUE_KEY" && -n "${GITHUB_ISSUE_NUMBER:-}" && "${GITHUB_ISSUE_NUMBER}" != "N/A" ]]; then
+    echo "$GITHUB_ISSUE_NUMBER"
+    return
+  fi
+
+  echo ""
+}
 
 github_create_issue() {
   local repo="$1" title="$2" body="$3" labels="$4" parent_number="${5:-}"
@@ -123,7 +150,7 @@ jira_create_issue() {
   auth=$(printf '%s:%s' "$JIRA_EMAIL" "$JIRA_API_TOKEN" | base64 -w0)
 
   local adf_desc
-  adf_desc=$(printf '%s' "$description" | python3 "${SCRIPT_DIR}/markdown-to-adf.py" | jq '.body')
+  adf_desc=$(printf '%s' "$description" | python3 "${ADF_SCRIPT}" | jq '.body')
 
   local payload
   payload=$(jq -n \
@@ -282,6 +309,20 @@ if [[ "${ISSUE_SOURCE:-}" == "jira" && -n "${JIRA_HOST:-}" && -n "${JIRA_EMAIL:-
   echo "Found ${#EXISTING_TITLES[@]} existing child/linked issue(s) for dedup"
 fi
 
+if $USE_GITHUB && [[ -n "${REPO_FULL_NAME:-}" ]]; then
+  _gh_parent="${GITHUB_ISSUE_NUMBER:-}"
+  if [[ -z "$_gh_parent" && "${ISSUE_SOURCE:-}" == "github" ]]; then
+    _gh_parent="$ISSUE_KEY"
+  fi
+
+  if [[ -n "$_gh_parent" && "$_gh_parent" =~ ^[0-9]+$ ]]; then
+    while IFS='|' read -r _num _title; do
+      [[ -n "$_title" && -n "$_num" && -z "${EXISTING_TITLES[$_title]:-}" ]] && EXISTING_TITLES["$_title"]="#${_num}"
+    done < <(gh api "repos/${REPO_FULL_NAME}/issues/${_gh_parent}/sub_issues" --paginate --jq '.[] | "\(.number)|\(.title)"' 2>/dev/null || true)
+    echo "GitHub dedup index contains ${#EXISTING_TITLES[@]} title(s)"
+  fi
+fi
+
 # --- Create children in topological order ---
 
 CHILD_COUNT=$(jq '.children | length' "${RESULT_FILE}")
@@ -320,7 +361,7 @@ while [[ $CREATED_COUNT -lt $CHILD_COUNT && $PASS -lt $MAX_PASSES ]]; do
     CHILD_PARENT_TITLE=$(jq -r ".children[${i}].parent_title // \"\"" "${RESULT_FILE}")
     CHILD_TYPE=$(jq -r ".children[${i}].type" "${RESULT_FILE}")
     CHILD_DESC=$(jq -r ".children[${i}].description" "${RESULT_FILE}")
-    CHILD_AC=$(jq -r ".children[${i}].acceptance_criteria | map(\"- [ ] \" + .) | join(\"\n\")" "${RESULT_FILE}")
+    CHILD_AC=$(jq -r ".children[${i}].acceptance_criteria // [] | map(\"- [ ] \" + .) | join(\"\n\")" "${RESULT_FILE}")
     CHILD_LABELS=$(jq -c ".children[${i}].labels // []" "${RESULT_FILE}")
     CHILD_PRIORITY=$(jq -r ".children[${i}].priority // \"medium\"" "${RESULT_FILE}")
     CHILD_SCOPE=$(jq -r ".children[${i}].estimated_scope // \"M\"" "${RESULT_FILE}")
@@ -358,12 +399,20 @@ ${CHILD_AC}
     if $USE_GITHUB_FOR_CHILD; then
       TYPE_LABEL="$CHILD_TYPE"
       COMBINED_LABELS=$(echo "$CHILD_LABELS" | jq --arg t "$TYPE_LABEL" '. + [$t]')
-      NEW_ISSUE=$(github_create_issue "${REPO_FULL_NAME}" "$CHILD_TITLE" "$FULL_BODY" "$COMBINED_LABELS" "$PARENT_KEY_FOR_CHILD")
+      GITHUB_PARENT=$(resolve_github_parent_number "$PARENT_KEY_FOR_CHILD")
+      if [[ -z "$GITHUB_PARENT" && -n "$PARENT_KEY_FOR_CHILD" ]]; then
+        echo "::warning::Skipping sub-issue link for '${CHILD_TITLE}' — parent '${PARENT_KEY_FOR_CHILD}' is not a GitHub issue number"
+      fi
+      NEW_ISSUE=$(github_create_issue "${REPO_FULL_NAME}" "$CHILD_TITLE" "$FULL_BODY" "$COMBINED_LABELS" "$GITHUB_PARENT")
       if [[ -z "$NEW_ISSUE" || "$NEW_ISSUE" == "FAILED" ]]; then
         echo "  [pass ${PASS}] FAILED to create ${CHILD_TYPE}: ${CHILD_TITLE}"
         continue
       fi
-      echo "  [pass ${PASS}] Created ${CHILD_TYPE} #${NEW_ISSUE} under #${PARENT_KEY_FOR_CHILD}"
+      if [[ -n "$GITHUB_PARENT" ]]; then
+        echo "  [pass ${PASS}] Created ${CHILD_TYPE} #${NEW_ISSUE} under #${GITHUB_PARENT}"
+      else
+        echo "  [pass ${PASS}] Created ${CHILD_TYPE} #${NEW_ISSUE} (no parent link)"
+      fi
       TITLE_TO_KEY["$CHILD_TITLE"]="$NEW_ISSUE"
       CREATED_KEYS+=("#$NEW_ISSUE")
     else
@@ -413,7 +462,7 @@ if [[ $CREATED_COUNT -lt $CHILD_COUNT ]]; then
 
     CHILD_TYPE=$(jq -r ".children[${i}].type" "${RESULT_FILE}")
     CHILD_DESC=$(jq -r ".children[${i}].description" "${RESULT_FILE}")
-    CHILD_AC=$(jq -r ".children[${i}].acceptance_criteria | map(\"- [ ] \" + .) | join(\"\n\")" "${RESULT_FILE}")
+    CHILD_AC=$(jq -r ".children[${i}].acceptance_criteria // [] | map(\"- [ ] \" + .) | join(\"\n\")" "${RESULT_FILE}")
     CHILD_LABELS=$(jq -c ".children[${i}].labels // []" "${RESULT_FILE}")
     CHILD_PRIORITY=$(jq -r ".children[${i}].priority // \"medium\"" "${RESULT_FILE}")
     CHILD_SCOPE=$(jq -r ".children[${i}].estimated_scope // \"M\"" "${RESULT_FILE}")
@@ -439,7 +488,11 @@ ${CHILD_AC}
     if $USE_GITHUB_FOR_CHILD; then
       TYPE_LABEL="$CHILD_TYPE"
       COMBINED_LABELS=$(echo "$CHILD_LABELS" | jq --arg t "$TYPE_LABEL" '. + [$t]')
-      NEW_ISSUE=$(github_create_issue "${REPO_FULL_NAME}" "$CHILD_TITLE" "$FULL_BODY" "$COMBINED_LABELS" "$ISSUE_KEY")
+      GITHUB_PARENT=$(resolve_github_parent_number "$ISSUE_KEY")
+      if [[ -z "$GITHUB_PARENT" ]]; then
+        echo "::warning::Skipping sub-issue link for orphan '${CHILD_TITLE}' — no GitHub parent issue number available"
+      fi
+      NEW_ISSUE=$(github_create_issue "${REPO_FULL_NAME}" "$CHILD_TITLE" "$FULL_BODY" "$COMBINED_LABELS" "$GITHUB_PARENT")
       if [[ -z "$NEW_ISSUE" || "$NEW_ISSUE" == "FAILED" ]]; then
         echo "  [orphan] FAILED to create: ${CHILD_TITLE}"
         continue

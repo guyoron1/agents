@@ -1,7 +1,5 @@
 # Critique Agent
 
-<img src="icons/critique.png" alt="Critique agent icon" width="80">
-
 Adversarial reviewer and quality gate for refinement plans. Evaluates a proposed decomposition from the refine agent and decides: approve (ready for issue creation), revise (send back to refine), or needs_input (escalate to a human for clarification).
 
 > **Note**: The explore and refine agents are added in separate PRs. Cross-references to their docs pages will resolve once all three PRs merge.
@@ -10,7 +8,7 @@ Adversarial reviewer and quality gate for refinement plans. Evaluates a proposed
 
 The critique agent runs after the refine agent has produced a decomposition plan. It reads the original work item, exploration context, the proposed plan, and any prior critique history (for revision rounds). It evaluates the plan across seven dimensions — coverage, granularity, dependency coherence, implementability, scope accuracy, assumption grounding, and description clarity — and produces a structured verdict.
 
-The agent runs in a read-only sandbox. It cannot modify issues, create children, or interact with external services. Its only output is a structured JSON critique result consumed by the post-script, which posts a summary comment, attaches feedback, and applies labels to signal the next pipeline step.
+The agent runs in a read-only sandbox. It cannot modify issues or create children directly — those mutations are performed by the post-script on the runner. The sandbox policy permits read-only egress to GitHub and Jira APIs plus inference endpoints, but the agent's only output is a structured JSON critique result consumed by the post-script, which posts a summary comment, attaches feedback, and applies labels to signal the next pipeline step.
 
 ## How it helps
 

@@ -173,7 +173,7 @@ determine_labels() {
     revise)
       local next_round=$((review_round + 1))
       if [[ $next_round -gt $max_review_rounds ]]; then
-        echo "refine-needs-human,refine-approved"
+        echo "refine-needs-human,refine-escalated"
       else
         echo "ready-to-refine,refine-revision-round-${next_round}"
       fi
@@ -197,7 +197,7 @@ run_test "labels-revise-round-1" \
   "$(determine_labels "revise" 1 3)"
 
 run_test "labels-revise-at-limit" \
-  "refine-needs-human,refine-approved" \
+  "refine-needs-human,refine-escalated" \
   "$(determine_labels "revise" 3 3)"
 
 run_test "labels-needs-input" \
@@ -334,15 +334,18 @@ test_escalation_history() {
   echo '{"rounds": [{"round": 1, "verdict": "revise", "overall_score": 62}, {"round": 2, "verdict": "revise", "overall_score": 68}, {"round": 3, "verdict": "revise", "overall_score": 71}]}' > "$history_file"
 
   local updated
-  updated=$(jq '.rounds[-1].verdict = "approved" | .rounds[-1].escalated = true' "$history_file")
+  updated=$(jq '.rounds[-1].escalated = true | .rounds[-1].escalation_reason = "max_rounds"' "$history_file")
 
   local last_verdict
   last_verdict=$(echo "$updated" | jq -r '.rounds[-1].verdict')
   local last_escalated
   last_escalated=$(echo "$updated" | jq -r '.rounds[-1].escalated')
+  local escalation_reason
+  escalation_reason=$(echo "$updated" | jq -r '.rounds[-1].escalation_reason')
 
-  run_test "escalation-changes-verdict" "approved" "$last_verdict"
+  run_test "escalation-preserves-verdict" "revise" "$last_verdict"
   run_test "escalation-sets-flag" "true" "$last_escalated"
+  run_test "escalation-records-reason" "max_rounds" "$escalation_reason"
 }
 
 test_escalation_history
