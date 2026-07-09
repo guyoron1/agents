@@ -40,7 +40,7 @@ The critique agent is the third stage of a three-stage refinement pipeline:
 | `approved` + `AUTO_CREATE=true` | Creates child issues immediately via `create-children.sh` |
 | `approved` + `AUTO_CREATE=false` | Posts approval, adds `refine-approved` label for human gate |
 | `revise` + under round limit | Posts feedback, adds `ready-to-refine` label for revision |
-| `revise` + at round limit | Escalates to human, adds `refine-needs-human` label |
+| `revise` + at round limit | Escalates to human, adds `refine-needs-human` and `refine-escalated` labels |
 | `needs_input` | Posts question, adds `refine-needs-input` label |
 
 ## Control labels
@@ -54,6 +54,7 @@ These labels are managed by the critique pipeline:
 | `refine-revision-round-N` | Tracks which revision round the pipeline is on |
 | `refine-needs-input` | Human must answer a question before proceeding |
 | `refine-needs-human` | Max review rounds reached; human decision needed |
+| `refine-escalated` | Distinguishes max-rounds escalation from genuine approval |
 
 ## Child issue creation
 

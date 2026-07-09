@@ -80,9 +80,10 @@ elif [[ "${ISSUE_SOURCE}" == "jira" && -n "${JIRA_HOST:-}" && -n "${JIRA_EMAIL:-
       | head -1 2>/dev/null || true)
 
     if [[ -n "$EXPLORE_URL" ]]; then
-      curl -sSfL -H "Authorization: Basic $AUTH" \
-        "$EXPLORE_URL" > "$WORKSPACE/exploration_context.json" \
-        && echo "Exploration context downloaded from Jira attachment." || true
+      if curl -sSfL -H "Authorization: Basic $AUTH" \
+        "$EXPLORE_URL" > "$WORKSPACE/exploration_context.json"; then
+        echo "Exploration context downloaded from Jira attachment."
+      fi
     fi
   fi
 
@@ -220,11 +221,13 @@ if [[ -n "$PLATFORM_CONTEXT_FILE" ]]; then
 fi
 
 # --- Export paths ---
-echo "ISSUE_CONTEXT=$WORKSPACE/issue-context.json" >> "${GITHUB_ENV:-/dev/null}"
-echo "EXPLORE_CONTEXT=$WORKSPACE/exploration_context.json" >> "${GITHUB_ENV:-/dev/null}"
-echo "REFINE_RESULT=$WORKSPACE/refine-result.json" >> "${GITHUB_ENV:-/dev/null}"
-echo "CRITIQUE_HISTORY=$WORKSPACE/critique-history.json" >> "${GITHUB_ENV:-/dev/null}"
-echo "REVIEW_ROUND=$REVIEW_ROUND" >> "${GITHUB_ENV:-/dev/null}"
-echo "MAX_REVIEW_ROUNDS=$MAX_REVIEW_ROUNDS" >> "${GITHUB_ENV:-/dev/null}"
+{
+  echo "ISSUE_CONTEXT=$WORKSPACE/issue-context.json"
+  echo "EXPLORE_CONTEXT=$WORKSPACE/exploration_context.json"
+  echo "REFINE_RESULT=$WORKSPACE/refine-result.json"
+  echo "CRITIQUE_HISTORY=$WORKSPACE/critique-history.json"
+  echo "REVIEW_ROUND=$REVIEW_ROUND"
+  echo "MAX_REVIEW_ROUNDS=$MAX_REVIEW_ROUNDS"
+} >> "${GITHUB_ENV:-/dev/null}"
 
 echo "Pre-critique complete."

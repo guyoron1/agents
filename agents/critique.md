@@ -417,3 +417,7 @@ The `question` object is required when `verdict` is `needs_input`. It must:
 - Keep revisions focused — 3-7 revisions is typical. More than 10 suggests
   the plan is fundamentally broken and you should say so in the comment
   rather than listing 15 individual fixes.
+
+```bash
+fullsend-check-output "$FULLSEND_OUTPUT_DIR/agent-result.json"
+```

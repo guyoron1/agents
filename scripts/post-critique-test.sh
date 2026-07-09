@@ -38,6 +38,8 @@ run_test() {
 determine_reply_target() {
   local github_issue_number="${1:-}"
   local issue_source="${2:-}"
+  # Third arg (issue_key) is unused — kept for call-site parity with post-critique.sh
+  # shellcheck disable=SC2034
   local issue_key="${3:-}"
 
   local use_github=false
