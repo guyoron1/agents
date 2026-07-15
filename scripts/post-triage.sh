@@ -79,7 +79,7 @@ remove_label() {
 # add or remove these via label_actions. This list covers labels that the
 # pipeline itself applies (pre-triage.sh resets the first five; the action
 # handlers apply blocked/triaged/feature).
-CONTROL_LABELS=("needs-info" "ready-to-code" "duplicate" "feature" "blocked" "triaged" "question" "bug" "documentation")
+CONTROL_LABELS=("needs-info" "ready-to-code" "duplicate" "feature" "blocked" "triaged" "question" "bug" "documentation" "performance")
 
 is_control_label() {
   local label="$1"
@@ -307,29 +307,41 @@ ${FAILED_CREATES}"
 
     remove_label "blocked"
     remove_label "needs-info"
+    remove_label "triaged"
 
     # Low-risk categories (bug, documentation, performance) auto-promote to
     # ready-to-code, which triggers the code agent. Feature work and anything
     # else receives the triaged label and waits for human prioritization
     # (per #561, only feature issues should require human review before coding).
+    #
+    # Effort-based gating (#2207): high-effort bug/docs/performance issues
+    # (effort >= 2.0) get triaged instead of ready-to-code to route them through
+    # human review before dispatching to the code agent.
     CATEGORY=$(jq -r '.triage_summary.category // "unknown"' "${RESULT_FILE}")
-    echo "Category: ${CATEGORY}"
+    EFFORT=$(jq -r '.triage_summary.effort // "null"' "${RESULT_FILE}")
+    EFFORT_SAFE="${EFFORT//[^0-9.]/_}"
+    echo "Category: ${CATEGORY}, Effort: ${EFFORT_SAFE}"
     case "${CATEGORY}" in
-      bug)
-        echo "Applying bug label..."
-        add_label "bug"
-        echo "Deferring ready-to-code label (${CATEGORY}) until after label_actions..."
-        DEFERRED_LABEL="ready-to-code"
-        ;;
-      documentation)
-        echo "Applying documentation label..."
-        add_label "documentation"
-        echo "Deferring ready-to-code label (${CATEGORY}) until after label_actions..."
-        DEFERRED_LABEL="ready-to-code"
-        ;;
-      performance)
-        echo "Deferring ready-to-code label (${CATEGORY}) until after label_actions..."
-        DEFERRED_LABEL="ready-to-code"
+      bug|documentation|performance)
+        add_label "${CATEGORY}"
+        # Effort threshold: >= 2.0 is substantial work, route to human review.
+        # Missing effort → conservatively route to human review (triaged).
+        if [[ "${EFFORT}" == "null" ]]; then
+          echo "Missing effort estimate — deferring triaged label for human review..."
+          remove_label "ready-to-code"
+          DEFERRED_LABEL="triaged"
+        elif ! [[ "${EFFORT}" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+          echo "::warning::Non-numeric effort value '${EFFORT_SAFE}' — treating as high effort for human review"
+          remove_label "ready-to-code"
+          DEFERRED_LABEL="triaged"
+        elif awk -v effort="${EFFORT}" 'BEGIN { exit (effort >= 2.0 ? 0 : 1) }'; then
+          echo "High effort (${EFFORT_SAFE}) — deferring triaged label for human review..."
+          remove_label "ready-to-code"
+          DEFERRED_LABEL="triaged"
+        else
+          echo "Low effort (${EFFORT_SAFE}) — deferring ready-to-code label until after label_actions..."
+          DEFERRED_LABEL="ready-to-code"
+        fi
         ;;
       feature)
         echo "Applying feature + triaged labels..."
