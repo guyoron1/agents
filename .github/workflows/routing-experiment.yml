@@ -89,6 +89,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.EXPERIMENT_GH_TOKEN }}
         run: |
+          mkdir -p "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           VERSION=$(gh release view --repo fullsend-ai/fullsend --json tagName --jq '.tagName')
           TARBALL="fullsend_${VERSION#v}_linux_amd64.tar.gz"
           gh release download "$VERSION" \
