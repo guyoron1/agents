@@ -111,22 +111,23 @@ jobs:
           EXPERIMENT_GH_TOKEN: ${{ secrets.EXPERIMENT_GH_TOKEN }}
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GCP_REGION: ${{ vars.GCP_REGION }}
-          REPO_NAME: ${{ github.repository }}
         run: |
           ISSUE_URL="https://github.com/fullsend-ai/agents/issues/${ISSUE_NUMBER}"
+          UPSTREAM_REPO="fullsend-ai/agents"
 
           # Verify issue exists
           GH_TOKEN="$EXPERIMENT_GH_TOKEN" gh issue view "$ISSUE_NUMBER" \
-            --repo fullsend-ai/agents --json title --jq '.title'
+            --repo "$UPSTREAM_REPO" --json title --jq '.title'
 
-          # Build env file — values come from validated env vars, not
-          # untrusted user input. Token is written via printenv to avoid
-          # shell interpolation of special characters.
+          # Build env file — REPO_FULL_NAME must match the issue URL repo
+          # (fullsend-ai/agents), not the fork (guyoron1/agents), because
+          # the pre-script validates this. Post-script is skipped for the
+          # experiment so push target doesn't matter.
           {
             printf 'GH_TOKEN=%s\n' "$EXPERIMENT_GH_TOKEN"
             printf 'PUSH_TOKEN=%s\n' "$EXPERIMENT_GH_TOKEN"
             printf 'ISSUE_NUMBER=%s\n' "$ISSUE_NUMBER"
-            printf 'REPO_FULL_NAME=%s\n' "$REPO_NAME"
+            printf 'REPO_FULL_NAME=%s\n' "$UPSTREAM_REPO"
             printf 'GITHUB_ISSUE_URL=%s\n' "$ISSUE_URL"
             printf 'ANTHROPIC_VERTEX_PROJECT_ID=%s\n' "$GCP_PROJECT_ID"
             printf 'CLOUD_ML_REGION=%s\n' "$GCP_REGION"
