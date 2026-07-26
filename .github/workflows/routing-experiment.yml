@@ -80,8 +80,19 @@ jobs:
           echo "ANTHROPIC_VERTEX_PROJECT_ID=${GCP_PROJECT_ID}" >> "$GITHUB_ENV"
           echo "CLOUD_ML_REGION=${GCP_REGION}" >> "$GITHUB_ENV"
 
-      - name: Start Podman
+      - name: Install Podman
         run: |
+          sudo apt-get update
+          sudo apt-get install -y podman
+          podman --version
+
+      - name: Configure rootless Podman
+        run: |
+          test -f /sys/fs/cgroup/cgroup.controllers || { echo "::error::cgroups v2 required"; exit 1; }
+          whoami_user="$(whoami)"
+          grep -q "^${whoami_user}:" /etc/subuid || sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 "${whoami_user}"
+          podman system migrate
+          podman info
           systemctl --user start podman.socket
 
       - name: Install openshell
@@ -89,13 +100,8 @@ jobs:
           OPENSHELL_VERSION=0.0.83
           OPENSHELL_SHA=e3d26dd3ae0dee247bbc5db368545832757ac493
           mkdir -p "$HOME/.config/openshell/"
-          cat > "$HOME/.config/openshell/gateway.toml" << EOF
-          [openshell]
-          version = 1
-
-          [openshell.gateway]
-          supervisor_image = "ghcr.io/nvidia/openshell/supervisor:${OPENSHELL_VERSION}"
-          EOF
+          printf 'OPENSHELL_BIND_ADDRESS=0.0.0.0\n' > "$HOME/.config/openshell/gateway.env"
+          printf '[openshell]\nversion = 1\n\n[openshell.gateway]\nsupervisor_image = "ghcr.io/nvidia/openshell/supervisor:%s"\n' "$OPENSHELL_VERSION" > "$HOME/.config/openshell/gateway.toml"
           curl -LsSf "https://raw.githubusercontent.com/NVIDIA/OpenShell/${OPENSHELL_SHA}/install.sh" \
             | OPENSHELL_VERSION="v${OPENSHELL_VERSION}" sh
           openshell --version
