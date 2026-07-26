@@ -81,9 +81,20 @@ jobs:
           echo "CLOUD_ML_REGION=${GCP_REGION}" >> "$GITHUB_ENV"
 
       - name: Install fullsend
+        env:
+          GH_TOKEN: ${{ secrets.EXPERIMENT_GH_TOKEN }}
         run: |
-          curl -fsSL https://raw.githubusercontent.com/fullsend-ai/fullsend/main/install.sh | bash
+          VERSION=$(gh release view --repo fullsend-ai/fullsend --json tagName --jq '.tagName')
+          TARBALL="fullsend_${VERSION#v}_linux_amd64.tar.gz"
+          gh release download "$VERSION" \
+            --repo fullsend-ai/fullsend \
+            --pattern "$TARBALL" \
+            --dir /tmp
+          mkdir -p "$HOME/.local/bin"
+          tar -xzf "/tmp/$TARBALL" -C "$HOME/.local/bin" fullsend
+          chmod +x "$HOME/.local/bin/fullsend"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          echo "Installed fullsend $VERSION"
 
       - name: Patch model in harness
         run: |
