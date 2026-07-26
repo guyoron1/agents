@@ -80,9 +80,24 @@ jobs:
           echo "ANTHROPIC_VERTEX_PROJECT_ID=${GCP_PROJECT_ID}" >> "$GITHUB_ENV"
           echo "CLOUD_ML_REGION=${GCP_REGION}" >> "$GITHUB_ENV"
 
+      - name: Start Podman
+        run: |
+          systemctl --user start podman.socket
+
       - name: Install openshell
         run: |
-          curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | sh
+          OPENSHELL_VERSION=0.0.83
+          OPENSHELL_SHA=e3d26dd3ae0dee247bbc5db368545832757ac493
+          mkdir -p "$HOME/.config/openshell/"
+          cat > "$HOME/.config/openshell/gateway.toml" << EOF
+          [openshell]
+          version = 1
+
+          [openshell.gateway]
+          supervisor_image = "ghcr.io/nvidia/openshell/supervisor:${OPENSHELL_VERSION}"
+          EOF
+          curl -LsSf "https://raw.githubusercontent.com/NVIDIA/OpenShell/${OPENSHELL_SHA}/install.sh" \
+            | OPENSHELL_VERSION="v${OPENSHELL_VERSION}" sh
           openshell --version
 
       - name: Install fullsend
@@ -133,6 +148,7 @@ jobs:
             printf 'CLOUD_ML_REGION=%s\n' "$GCP_REGION"
             printf 'GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-credentials.json\n'
             printf 'PUSH_TOKEN_SOURCE=eval\n'
+            printf 'CODE_FORCE=true\n'
             printf 'CODE_ALLOWED_TARGET_BRANCHES=\n'
             printf 'GIT_BOT_EMAIL=routing-experiment[bot]@users.noreply.github.com\n'
           } > /tmp/experiment-env
