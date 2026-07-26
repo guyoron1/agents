@@ -80,6 +80,28 @@ jobs:
           echo "ANTHROPIC_VERTEX_PROJECT_ID=${GCP_PROJECT_ID}" >> "$GITHUB_ENV"
           echo "CLOUD_ML_REGION=${GCP_REGION}" >> "$GITHUB_ENV"
 
+      - name: Install openshell
+        env:
+          GH_TOKEN: ${{ secrets.EXPERIMENT_GH_TOKEN }}
+        run: |
+          OS_VERSION=$(gh release view --repo NVIDIA/OpenShell --json tagName --jq '.tagName')
+          gh release download "$OS_VERSION" \
+            --repo NVIDIA/OpenShell \
+            --pattern "openshell-x86_64-unknown-linux-musl.tar.gz" \
+            --dir /tmp
+          mkdir -p "$HOME/.local/bin"
+          tar -xzf /tmp/openshell-x86_64-unknown-linux-musl.tar.gz -C "$HOME/.local/bin"
+          chmod +x "$HOME/.local/bin/openshell"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          echo "Installed openshell $OS_VERSION"
+          openshell --version
+
+      - name: Start openshell gateway
+        run: |
+          openshell gateway start
+          sleep 2
+          openshell gateway list
+
       - name: Install fullsend
         env:
           GH_TOKEN: ${{ secrets.EXPERIMENT_GH_TOKEN }}
@@ -90,10 +112,8 @@ jobs:
             --repo fullsend-ai/fullsend \
             --pattern "$TARBALL" \
             --dir /tmp
-          mkdir -p "$HOME/.local/bin"
           tar -xzf "/tmp/$TARBALL" -C "$HOME/.local/bin" fullsend
           chmod +x "$HOME/.local/bin/fullsend"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           echo "Installed fullsend $VERSION"
 
       - name: Patch model in harness
