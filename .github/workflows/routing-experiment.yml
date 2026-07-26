@@ -83,15 +83,7 @@ jobs:
       - name: Install openshell
         run: |
           curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | sh
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          "$HOME/.local/bin/openshell" --version
-
-      - name: Start openshell gateway
-        run: |
-          docker info > /dev/null 2>&1 || { echo "Docker not available"; exit 1; }
-          "$HOME/.local/bin/openshell" gateway start --name experiment 2>&1 || true
-          sleep 3
-          "$HOME/.local/bin/openshell" gateway info 2>&1 || true
+          openshell --version
 
       - name: Install fullsend
         env:
