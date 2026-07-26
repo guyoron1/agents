@@ -1,0 +1,218 @@
+# Routing experiment: run the code agent on an issue with a specified model.
+#
+# This is a standalone workflow for the costwise routing experiment.
+# It bypasses the fullsend OIDC mint / central dispatch and uses
+# repository secrets directly.
+#
+# Required repository secrets:
+#   GCP_SA_KEY              — GCP service account JSON key for Vertex AI
+#   EXPERIMENT_GH_TOKEN     — GitHub PAT with repo scope (for reading issues + pushing)
+#
+# Required repository variables:
+#   GCP_PROJECT_ID          — e.g. itpc-gcp-pnd-pe-eng-claude
+#   GCP_REGION              — e.g. us-east5
+#
+# Usage:
+#   gh workflow run routing-experiment.yml \
+#     -f issue_number=365 \
+#     -f model=haiku \
+#     --repo guyoron1/agents
+name: Routing Experiment
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: "Issue number to work on"
+        required: true
+        type: string
+      model:
+        description: "Claude model to use"
+        required: true
+        type: choice
+        options:
+          - haiku
+          - sonnet
+          - opus
+      skip_post_script:
+        description: "Skip post-script (no PR creation)"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  run-agent:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      ISSUE_NUMBER: ${{ inputs.issue_number }}
+      MODEL: ${{ inputs.model }}
+      SKIP_POST: ${{ inputs.skip_post_script }}
+    steps:
+      - name: Validate inputs
+        run: |
+          if [[ ! "$ISSUE_NUMBER" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::issue_number must be a positive integer, got: '$ISSUE_NUMBER'"
+            exit 1
+          fi
+          if [[ ! "$MODEL" =~ ^(haiku|sonnet|opus)$ ]]; then
+            echo "::error::model must be haiku, sonnet, or opus, got: '$MODEL'"
+            exit 1
+          fi
+
+      - name: Checkout agents repo
+        uses: actions/checkout@v4
+
+      - name: Set up GCP credentials
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ vars.GCP_REGION }}
+        run: |
+          printenv GCP_SA_KEY > /tmp/gcp-credentials.json
+          chmod 600 /tmp/gcp-credentials.json
+          echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-credentials.json" >> "$GITHUB_ENV"
+          echo "ANTHROPIC_VERTEX_PROJECT_ID=${GCP_PROJECT_ID}" >> "$GITHUB_ENV"
+          echo "CLOUD_ML_REGION=${GCP_REGION}" >> "$GITHUB_ENV"
+
+      - name: Install fullsend
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/fullsend-ai/fullsend/main/install.sh | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Patch model in harness
+        run: |
+          sed -i "s/^model: .*/model: ${MODEL}/" harness/code.yaml
+          echo "Model set to: $(grep '^model:' harness/code.yaml)"
+
+      - name: Prepare environment
+        env:
+          EXPERIMENT_GH_TOKEN: ${{ secrets.EXPERIMENT_GH_TOKEN }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ vars.GCP_REGION }}
+          REPO_NAME: ${{ github.repository }}
+        run: |
+          ISSUE_URL="https://github.com/fullsend-ai/agents/issues/${ISSUE_NUMBER}"
+
+          # Verify issue exists
+          GH_TOKEN="$EXPERIMENT_GH_TOKEN" gh issue view "$ISSUE_NUMBER" \
+            --repo fullsend-ai/agents --json title --jq '.title'
+
+          # Build env file — values come from validated env vars, not
+          # untrusted user input. Token is written via printenv to avoid
+          # shell interpolation of special characters.
+          {
+            printf 'GH_TOKEN=%s\n' "$EXPERIMENT_GH_TOKEN"
+            printf 'PUSH_TOKEN=%s\n' "$EXPERIMENT_GH_TOKEN"
+            printf 'ISSUE_NUMBER=%s\n' "$ISSUE_NUMBER"
+            printf 'REPO_FULL_NAME=%s\n' "$REPO_NAME"
+            printf 'GITHUB_ISSUE_URL=%s\n' "$ISSUE_URL"
+            printf 'ANTHROPIC_VERTEX_PROJECT_ID=%s\n' "$GCP_PROJECT_ID"
+            printf 'CLOUD_ML_REGION=%s\n' "$GCP_REGION"
+            printf 'GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-credentials.json\n'
+            printf 'PUSH_TOKEN_SOURCE=eval\n'
+            printf 'CODE_ALLOWED_TARGET_BRANCHES=\n'
+            printf 'GIT_BOT_EMAIL=routing-experiment[bot]@users.noreply.github.com\n'
+          } > /tmp/experiment-env
+          chmod 600 /tmp/experiment-env
+
+      - name: Run code agent
+        id: agent
+        env:
+          GH_TOKEN: ${{ secrets.EXPERIMENT_GH_TOKEN }}
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp-credentials.json
+          WORKSPACE: ${{ github.workspace }}
+        run: |
+          set +e
+          START_TIME=$(date +%s)
+
+          SKIP_FLAG=""
+          if [[ "$SKIP_POST" == "true" ]]; then
+            SKIP_FLAG="--no-post-script"
+          fi
+
+          OUTPUT_DIR="/tmp/routing-experiment-output"
+          mkdir -p "$OUTPUT_DIR"
+
+          fullsend run code \
+            --fullsend-dir "$WORKSPACE" \
+            --target-repo "$WORKSPACE" \
+            --env-file /tmp/experiment-env \
+            --output-dir "$OUTPUT_DIR" \
+            $SKIP_FLAG \
+            2>&1 | tee "$OUTPUT_DIR/fullsend.log"
+
+          EXIT_CODE=$?
+          END_TIME=$(date +%s)
+          DURATION=$((END_TIME - START_TIME))
+
+          if [[ $EXIT_CODE -eq 0 ]]; then
+            OUTCOME="pass"
+          elif [[ $EXIT_CODE -eq 124 ]]; then
+            OUTCOME="timeout"
+          else
+            OUTCOME="fail"
+          fi
+
+          TURNS=0
+          COST="0.00"
+          METRICS_FILE=$(find "$OUTPUT_DIR" -name "metrics.json" 2>/dev/null | head -1)
+          if [[ -n "$METRICS_FILE" && -f "$METRICS_FILE" ]]; then
+            TURNS=$(python3 -c "import json; m=json.load(open('$METRICS_FILE')); print(m.get('num_turns', 0))" 2>/dev/null || echo "0")
+            COST=$(python3 -c "import json; m=json.load(open('$METRICS_FILE')); print(f\"{m.get('total_cost_usd', 0):.2f}\")" 2>/dev/null || echo "0.00")
+          fi
+
+          echo "outcome=$OUTCOME" >> "$GITHUB_OUTPUT"
+          echo "turns=$TURNS" >> "$GITHUB_OUTPUT"
+          echo "cost=$COST" >> "$GITHUB_OUTPUT"
+          echo "duration=$DURATION" >> "$GITHUB_OUTPUT"
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+
+          echo ""
+          echo "════════════════════════════════════════════════════"
+          echo "  RESULT: Issue #${ISSUE_NUMBER} / ${MODEL}"
+          echo "  Outcome: $OUTCOME"
+          echo "  Turns:   $TURNS"
+          echo "  Cost:    \$$COST"
+          echo "  Duration: ${DURATION}s"
+          echo "════════════════════════════════════════════════════"
+
+      - name: Upload metrics artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: routing-trial-${{ inputs.issue_number }}-${{ inputs.model }}
+          path: /tmp/routing-experiment-output/
+          retention-days: 30
+
+      - name: Post summary
+        if: always()
+        env:
+          OUTCOME: ${{ steps.agent.outputs.outcome }}
+          TURNS: ${{ steps.agent.outputs.turns }}
+          COST: ${{ steps.agent.outputs.cost }}
+          DURATION: ${{ steps.agent.outputs.duration }}
+          EXIT_CODE: ${{ steps.agent.outputs.exit_code }}
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" << EOF
+          ## Routing Experiment Trial
+
+          | Field | Value |
+          |-------|-------|
+          | Issue | #${ISSUE_NUMBER} |
+          | Model | ${MODEL} |
+          | Outcome | ${OUTCOME} |
+          | Turns | ${TURNS} |
+          | Cost | \$${COST} |
+          | Duration | ${DURATION}s |
+          | Exit Code | ${EXIT_CODE} |
+          EOF
+
+      - name: Clean up credentials
+        if: always()
+        run: rm -f /tmp/gcp-credentials.json /tmp/experiment-env
