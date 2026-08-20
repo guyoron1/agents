@@ -26,6 +26,9 @@ host_files:
 pre_script: scripts/pre-triage.sh
 post_script: scripts/post-triage.sh
 
+skills:
+  - skills/code-grounding
+
 validation_loop:
   script: scripts/validate-output-schema.sh
   schema: schemas/triage-result.schema.json
