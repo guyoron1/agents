@@ -523,7 +523,7 @@ for arg in "\$@"; do
       # post-comment streams a markdown body, not JSON — keep a copy so
       # tests can inspect the sticky risk comment after the review post
       # overwrites last-result.json.
-      if [[ "\$1" == "post-comment" ]]; then
+      if [[ "\$1" == "post-comment" || ( "\$1" == "issues" && "\$2" == "post-comment" ) ]]; then
         tee "${TMPDIR}/last-comment.md" > "${TMPDIR}/last-result.json"
       else
         cat > "${TMPDIR}/last-result.json"
