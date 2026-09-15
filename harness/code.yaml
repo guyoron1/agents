@@ -139,7 +139,10 @@ overlays:
   # Jira overlay and a forge overlay match.
   # pre_script overrides the top-level default.  Post-script selection
   # stays with the target forge (GitHub/GitLab).
-  - when: 'event.source.system == "jira"'
+  # has(event.source) guards the field access: on non-Jira runs event is
+  # present but has no source, and unguarded event.source throws CEL
+  # "no such key: source" instead of skipping the overlay.
+  - when: 'has(event.source) && event.source.system == "jira"'
     providers:
       - providers/jira-ro.yaml
     openshell:
